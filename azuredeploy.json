@@ -1,0 +1,179 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "webAppName": {
+      "type": "string",
+      "defaultValue": "[format('openwebui-{0}', uniqueString(resourceGroup().id))]",
+      "metadata": {
+        "description": "Web App の名前。https://<webAppName>.azurewebsites.net でアクセスできます。"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "デプロイ先リージョン"
+      }
+    },
+    "appServicePlanSku": {
+      "type": "string",
+      "defaultValue": "B2",
+      "allowedValues": [ "B1", "B2", "B3", "P0v3", "P1v3", "P2v3" ],
+      "metadata": {
+        "description": "App Service Plan の SKU。RAG用の埋め込みモデルをコンテナ内で実行するため、B1(1.75GB)だとメモリ不足でOOM Killされる可能性があります。"
+      }
+    },
+    "containerImage": {
+      "type": "string",
+      "defaultValue": "ghcr.io/open-webui/open-webui:main",
+      "metadata": {
+        "description": "デプロイするコンテナイメージ"
+      }
+    },
+    "webuiSecretKey": {
+      "type": "securestring",
+      "defaultValue": "[newGuid()]",
+      "metadata": {
+        "description": "セッション署名用のシークレットキー (WEBUI_SECRET_KEY)。未指定の場合は自動生成されます。"
+      }
+    },
+    "webuiAuth": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "ログイン認証を有効にするか (WEBUI_AUTH)"
+      }
+    },
+    "enableSignup": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "新規ユーザーのサインアップを許可するか (ENABLE_SIGNUP)"
+      }
+    },
+    "openAiApiKey": {
+      "type": "securestring",
+      "metadata": {
+        "description": "OpenAI互換API(Azure AI Foundryなど)のAPIキー (OPENAI_API_KEY)。デプロイ時に入力してください。"
+      }
+    },
+    "openAiApiBaseUrl": {
+      "type": "string",
+      "defaultValue": "https://api.openai.com/v1",
+      "metadata": {
+        "description": "OpenAI互換APIのベースURL (OPENAI_API_BASE_URL)。Azure AI Foundryを使う場合は https://<リソース名>.services.ai.azure.com/openai/v1 のようなエンドポイントを指定します。"
+      }
+    },
+    "enableOllamaApi": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Ollama連携を有効にするか (ENABLE_OLLAMA_API)"
+      }
+    },
+    "ollamaBaseUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "外部Ollamaサーバーの URL (OLLAMA_BASE_URL)。使用しない場合は空欄のままにできます。"
+      }
+    }
+  },
+  "variables": {
+    "appServicePlanName": "[format('{0}-plan', parameters('webAppName'))]",
+    "storageAccountName": "[toLower(substring(format('owui{0}', uniqueString(resourceGroup().id)), 0, 24))]",
+    "fileShareName": "openwebui-data",
+    "dataMountPath": "/app/backend/data",
+    "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": { "name": "Standard_LRS" },
+      "kind": "StorageV2",
+      "properties": {
+        "minimumTlsVersion": "TLS1_2",
+        "allowBlobPublicAccess": false
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/default/{1}', variables('storageAccountName'), variables('fileShareName'))]",
+      "dependsOn": [ "[variables('storageAccountId')]" ]
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2022-09-01",
+      "name": "[variables('appServicePlanName')]",
+      "location": "[parameters('location')]",
+      "sku": { "name": "[parameters('appServicePlanSku')]" },
+      "kind": "linux",
+      "properties": {
+        "reserved": true
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-09-01",
+      "name": "[parameters('webAppName')]",
+      "location": "[parameters('location')]",
+      "kind": "app,linux,container",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]"
+      ],
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "httpsOnly": true,
+        "siteConfig": {
+          "linuxFxVersion": "[format('DOCKER|{0}', parameters('containerImage'))]",
+          "alwaysOn": true,
+          "appSettings": [
+            { "name": "WEBSITES_PORT", "value": "8080" },
+            { "name": "WEBUI_SECRET_KEY", "value": "[parameters('webuiSecretKey')]" },
+            { "name": "WEBUI_AUTH", "value": "[string(parameters('webuiAuth'))]" },
+            { "name": "ENABLE_SIGNUP", "value": "[string(parameters('enableSignup'))]" },
+            { "name": "OPENAI_API_KEY", "value": "[parameters('openAiApiKey')]" },
+            { "name": "OPENAI_API_BASE_URL", "value": "[parameters('openAiApiBaseUrl')]" },
+            { "name": "ENABLE_OLLAMA_API", "value": "[string(parameters('enableOllamaApi'))]" },
+            { "name": "OLLAMA_BASE_URL", "value": "[parameters('ollamaBaseUrl')]" },
+            { "name": "CORS_ALLOW_ORIGIN", "value": "*" },
+            { "name": "FORWARDED_ALLOW_IPS", "value": "*" },
+            { "name": "SCARF_NO_ANALYTICS", "value": "true" },
+            { "name": "DO_NOT_TRACK", "value": "true" },
+            { "name": "ANONYMIZED_TELEMETRY", "value": "false" }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites/config",
+      "apiVersion": "2022-09-01",
+      "name": "[format('{0}/azurestorageaccounts', parameters('webAppName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]",
+        "[format('{0}/default/{1}', variables('storageAccountId'), variables('fileShareName'))]",
+        "[format('{0}/fileServices/default/shares/{1}', variables('storageAccountId'), variables('fileShareName'))]"
+      ],
+      "properties": {
+        "owui-data": {
+          "type": "AzureFiles",
+          "accountName": "[variables('storageAccountName')]",
+          "shareName": "[variables('fileShareName')]",
+          "mountPath": "[variables('dataMountPath')]",
+          "accessKey": "[listKeys(variables('storageAccountId'), '2023-01-01').keys[0].value]"
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "webAppUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', parameters('webAppName'))).defaultHostName)]"
+    }
+  }
+}
