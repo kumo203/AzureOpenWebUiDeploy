@@ -33,9 +33,9 @@
     },
     "webuiSecretKey": {
       "type": "securestring",
-      "defaultValue": "[newGuid()]",
+      "defaultValue": "",
       "metadata": {
-        "description": "セッション署名用のシークレットキー (WEBUI_SECRET_KEY)。未指定の場合は自動生成されます。"
+        "description": "セッション署名用のシークレットキー (WEBUI_SECRET_KEY)。空欄の場合、コンテナ側が /app/backend/data 内に自動生成して永続化するため、再デプロイしても値は変わりません。"
       }
     },
     "webuiAuth": {

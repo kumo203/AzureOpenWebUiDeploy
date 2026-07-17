@@ -17,7 +17,7 @@ Azure App Service (Web App for Containers) 上に [Open WebUI](https://github.co
 | `webAppName` | Web App 名（URL の一部） | `openwebui-<一意な文字列>` |
 | `appServicePlanSku` | App Service Plan の SKU | `B2` |
 | `containerImage` | コンテナイメージ | `ghcr.io/open-webui/open-webui:main` |
-| `webuiSecretKey` | セッション署名キー (`WEBUI_SECRET_KEY`) | 自動生成 |
+| `webuiSecretKey` | セッション署名キー (`WEBUI_SECRET_KEY`) | 空（コンテナ側が `/app/backend/data` に自動生成・永続化） |
 | `webuiAuth` | ログイン認証の有効化 (`WEBUI_AUTH`) | `true` |
 | `enableSignup` | 新規サインアップ許可 (`ENABLE_SIGNUP`) | `true` |
 | `openAiApiKey` | OpenAI互換APIキー (`OPENAI_API_KEY`) | 空（任意。デプロイ後にAdmin Settings > Connectionsからも設定可能） |
