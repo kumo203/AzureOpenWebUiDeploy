@@ -15,6 +15,7 @@ Azure App Service (Web App for Containers) 上に [Open WebUI](https://github.co
 | パラメータ | 説明 | デフォルト |
 |---|---|---|
 | `webAppName` | Web App 名（URL の一部） | `openwebui-<一意な文字列>` |
+| `storageAccountName` | 永続データ用ストレージアカウント名（3〜24文字の小文字英数字、グローバルに一意） | `owui<一意な文字列>` |
 | `appServicePlanSku` | App Service Plan の SKU | `B2` |
 | `containerImage` | コンテナイメージ | `ghcr.io/open-webui/open-webui:main` |
 | `webuiSecretKey` | セッション署名キー (`WEBUI_SECRET_KEY`) | 空（コンテナ側が `/app/backend/data` に自動生成・永続化） |

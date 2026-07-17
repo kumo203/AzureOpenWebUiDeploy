@@ -16,6 +16,15 @@
         "description": "デプロイ先リージョン"
       }
     },
+    "storageAccountName": {
+      "type": "string",
+      "defaultValue": "[toLower(format('owui{0}', uniqueString(resourceGroup().id)))]",
+      "minLength": 3,
+      "maxLength": 24,
+      "metadata": {
+        "description": "永続データ(/app/backend/data)用ストレージアカウント名。3〜24文字の小文字英数字のみで、Azure全体で一意である必要があります。"
+      }
+    },
     "appServicePlanSku": {
       "type": "string",
       "defaultValue": "B2",
@@ -83,16 +92,16 @@
   },
   "variables": {
     "appServicePlanName": "[format('{0}-plan', parameters('webAppName'))]",
-    "storageAccountName": "[toLower(substring(format('owui{0}', uniqueString(resourceGroup().id)), 0, 24))]",
     "fileShareName": "openwebui-data",
     "dataMountPath": "/app/backend/data",
-    "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+    "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+    "fileShareId": "[resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', parameters('storageAccountName'), 'default', variables('fileShareName'))]"
   },
   "resources": [
     {
       "type": "Microsoft.Storage/storageAccounts",
       "apiVersion": "2023-01-01",
-      "name": "[variables('storageAccountName')]",
+      "name": "[parameters('storageAccountName')]",
       "location": "[parameters('location')]",
       "sku": { "name": "Standard_LRS" },
       "kind": "StorageV2",
@@ -104,7 +113,7 @@
     {
       "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
       "apiVersion": "2023-01-01",
-      "name": "[format('{0}/default/{1}', variables('storageAccountName'), variables('fileShareName'))]",
+      "name": "[format('{0}/default/{1}', parameters('storageAccountName'), variables('fileShareName'))]",
       "dependsOn": [ "[variables('storageAccountId')]" ]
     },
     {
@@ -157,13 +166,12 @@
       "name": "[format('{0}/azurestorageaccounts', parameters('webAppName'))]",
       "dependsOn": [
         "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]",
-        "[format('{0}/default/{1}', variables('storageAccountId'), variables('fileShareName'))]",
-        "[format('{0}/fileServices/default/shares/{1}', variables('storageAccountId'), variables('fileShareName'))]"
+        "[variables('fileShareId')]"
       ],
       "properties": {
         "owui-data": {
           "type": "AzureFiles",
-          "accountName": "[variables('storageAccountName')]",
+          "accountName": "[parameters('storageAccountName')]",
           "shareName": "[variables('fileShareName')]",
           "mountPath": "[variables('dataMountPath')]",
           "accessKey": "[listKeys(variables('storageAccountId'), '2023-01-01').keys[0].value]"
