@@ -54,8 +54,9 @@
     },
     "openAiApiKey": {
       "type": "securestring",
+      "defaultValue": "",
       "metadata": {
-        "description": "OpenAI互換API(Azure AI Foundryなど)のAPIキー (OPENAI_API_KEY)。デプロイ時に入力してください。"
+        "description": "OpenAI互換API(Azure AI Foundryなど)のAPIキー (OPENAI_API_KEY)。空欄の場合はデプロイ後にOpen WebUIのAdmin Settings > Connectionsから設定できます。"
       }
     },
     "openAiApiBaseUrl": {

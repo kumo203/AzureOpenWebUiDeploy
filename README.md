@@ -20,7 +20,7 @@ Azure App Service (Web App for Containers) 上に [Open WebUI](https://github.co
 | `webuiSecretKey` | セッション署名キー (`WEBUI_SECRET_KEY`) | 自動生成 |
 | `webuiAuth` | ログイン認証の有効化 (`WEBUI_AUTH`) | `true` |
 | `enableSignup` | 新規サインアップ許可 (`ENABLE_SIGNUP`) | `true` |
-| `openAiApiKey` | OpenAI互換APIキー (`OPENAI_API_KEY`) | なし（デプロイ時に入力必須） |
+| `openAiApiKey` | OpenAI互換APIキー (`OPENAI_API_KEY`) | 空（任意。デプロイ後にAdmin Settings > Connectionsからも設定可能） |
 | `openAiApiBaseUrl` | OpenAI互換APIのベースURL (`OPENAI_API_BASE_URL`) | `https://api.openai.com/v1` |
 | `enableOllamaApi` | Ollama連携の有効化 (`ENABLE_OLLAMA_API`) | `false` |
 | `ollamaBaseUrl` | Ollamaサーバー URL (`OLLAMA_BASE_URL`) | 空 |

@@ -8,9 +8,6 @@
     "appServicePlanSku": {
       "value": "B2"
     },
-    "openAiApiKey": {
-      "value": "REPLACE_WITH_YOUR_API_KEY"
-    },
     "openAiApiBaseUrl": {
       "value": "https://api.openai.com/v1"
     },
