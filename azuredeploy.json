@@ -2,11 +2,11 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "webAppName": {
+    "appName": {
       "type": "string",
       "defaultValue": "[format('openwebui-{0}', uniqueString(resourceGroup().id))]",
       "metadata": {
-        "description": "Web App の名前。https://<webAppName>.azurewebsites.net でアクセスできます。"
+        "description": "Container App の名前。https://<appName>.<region>.azurecontainerapps.io でアクセスできます。"
       }
     },
     "location": {
@@ -25,19 +25,25 @@
         "description": "永続データ(/app/backend/data)用ストレージアカウント名。3〜24文字の小文字英数字のみで、Azure全体で一意である必要があります。"
       }
     },
-    "appServicePlanSku": {
-      "type": "string",
-      "defaultValue": "B2",
-      "allowedValues": [ "B1", "B2", "B3", "P0v3", "P1v3", "P2v3" ],
-      "metadata": {
-        "description": "App Service Plan の SKU。RAG用の埋め込みモデルをコンテナ内で実行するため、B1(1.75GB)だとメモリ不足でOOM Killされる可能性があります。"
-      }
-    },
     "containerImage": {
       "type": "string",
       "defaultValue": "ghcr.io/open-webui/open-webui:main",
       "metadata": {
         "description": "デプロイするコンテナイメージ"
+      }
+    },
+    "containerCpu": {
+      "type": "string",
+      "defaultValue": "1.0",
+      "metadata": {
+        "description": "コンテナに割り当てるvCPU数。RAG用の埋め込みモデルをロードするため最低1.0を推奨。containerMemoryと有効な組み合わせである必要があります。"
+      }
+    },
+    "containerMemory": {
+      "type": "string",
+      "defaultValue": "2Gi",
+      "metadata": {
+        "description": "コンテナに割り当てるメモリ。containerCpuと有効な組み合わせである必要があります(例: 1.0vCPU=2Gi)。"
       }
     },
     "webuiSecretKey": {
@@ -91,11 +97,16 @@
     }
   },
   "variables": {
-    "appServicePlanName": "[format('{0}-plan', parameters('webAppName'))]",
+    "logAnalyticsWorkspaceName": "[format('{0}-law', parameters('appName'))]",
+    "envName": "[format('{0}-env', parameters('appName'))]",
     "fileShareName": "openwebui-data",
+    "storageMountName": "openwebui-data",
     "dataMountPath": "/app/backend/data",
+    "logAnalyticsWorkspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName'))]",
+    "envId": "[resourceId('Microsoft.App/managedEnvironments', variables('envName'))]",
     "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
-    "fileShareId": "[resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', parameters('storageAccountName'), 'default', variables('fileShareName'))]"
+    "fileShareId": "[resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', parameters('storageAccountName'), 'default', variables('fileShareName'))]",
+    "envStorageId": "[resourceId('Microsoft.App/managedEnvironments/storages', variables('envName'), variables('storageMountName'))]"
   },
   "resources": [
     {
@@ -117,64 +128,106 @@
       "dependsOn": [ "[variables('storageAccountId')]" ]
     },
     {
-      "type": "Microsoft.Web/serverfarms",
-      "apiVersion": "2022-09-01",
-      "name": "[variables('appServicePlanName')]",
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2022-10-01",
+      "name": "[variables('logAnalyticsWorkspaceName')]",
       "location": "[parameters('location')]",
-      "sku": { "name": "[parameters('appServicePlanSku')]" },
-      "kind": "linux",
       "properties": {
-        "reserved": true
+        "sku": { "name": "PerGB2018" },
+        "retentionInDays": 30
       }
     },
     {
-      "type": "Microsoft.Web/sites",
-      "apiVersion": "2022-09-01",
-      "name": "[parameters('webAppName')]",
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('envName')]",
       "location": "[parameters('location')]",
-      "kind": "app,linux,container",
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]"
-      ],
+      "dependsOn": [ "[variables('logAnalyticsWorkspaceId')]" ],
       "properties": {
-        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
-        "httpsOnly": true,
-        "siteConfig": {
-          "linuxFxVersion": "[format('DOCKER|{0}', parameters('containerImage'))]",
-          "alwaysOn": true,
-          "appSettings": [
-            { "name": "WEBSITES_PORT", "value": "8080" },
-            { "name": "WEBUI_SECRET_KEY", "value": "[parameters('webuiSecretKey')]" },
-            { "name": "WEBUI_AUTH", "value": "[string(parameters('webuiAuth'))]" },
-            { "name": "ENABLE_SIGNUP", "value": "[string(parameters('enableSignup'))]" },
-            { "name": "OPENAI_API_KEY", "value": "[parameters('openAiApiKey')]" },
-            { "name": "OPENAI_API_BASE_URL", "value": "[parameters('openAiApiBaseUrl')]" },
-            { "name": "ENABLE_OLLAMA_API", "value": "[string(parameters('enableOllamaApi'))]" },
-            { "name": "OLLAMA_BASE_URL", "value": "[parameters('ollamaBaseUrl')]" },
-            { "name": "CORS_ALLOW_ORIGIN", "value": "*" },
-            { "name": "FORWARDED_ALLOW_IPS", "value": "*" },
-            { "name": "SCARF_NO_ANALYTICS", "value": "true" },
-            { "name": "DO_NOT_TRACK", "value": "true" },
-            { "name": "ANONYMIZED_TELEMETRY", "value": "false" }
-          ]
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference(variables('logAnalyticsWorkspaceId'), '2022-10-01').customerId]",
+            "sharedKey": "[listKeys(variables('logAnalyticsWorkspaceId'), '2022-10-01').primarySharedKey]"
+          }
         }
       }
     },
     {
-      "type": "Microsoft.Web/sites/config",
-      "apiVersion": "2022-09-01",
-      "name": "[format('{0}/azurestorageaccounts', parameters('webAppName'))]",
+      "type": "Microsoft.App/managedEnvironments/storages",
+      "apiVersion": "2024-03-01",
+      "name": "[format('{0}/{1}', variables('envName'), variables('storageMountName'))]",
       "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]",
+        "[variables('envId')]",
         "[variables('fileShareId')]"
       ],
       "properties": {
-        "owui-data": {
-          "type": "AzureFiles",
+        "azureFile": {
           "accountName": "[parameters('storageAccountName')]",
+          "accountKey": "[listKeys(variables('storageAccountId'), '2023-01-01').keys[0].value]",
           "shareName": "[variables('fileShareName')]",
-          "mountPath": "[variables('dataMountPath')]",
-          "accessKey": "[listKeys(variables('storageAccountId'), '2023-01-01').keys[0].value]"
+          "accessMode": "ReadWrite"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[parameters('appName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[variables('envId')]",
+        "[variables('envStorageId')]"
+      ],
+      "properties": {
+        "managedEnvironmentId": "[variables('envId')]",
+        "configuration": {
+          "ingress": {
+            "external": true,
+            "targetPort": 8080,
+            "transport": "auto",
+            "allowInsecure": false
+          }
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "open-webui",
+              "image": "[parameters('containerImage')]",
+              "resources": {
+                "cpu": "[json(parameters('containerCpu'))]",
+                "memory": "[parameters('containerMemory')]"
+              },
+              "env": [
+                { "name": "WEBUI_SECRET_KEY", "value": "[parameters('webuiSecretKey')]" },
+                { "name": "WEBUI_AUTH", "value": "[string(parameters('webuiAuth'))]" },
+                { "name": "ENABLE_SIGNUP", "value": "[string(parameters('enableSignup'))]" },
+                { "name": "OPENAI_API_KEY", "value": "[parameters('openAiApiKey')]" },
+                { "name": "OPENAI_API_BASE_URL", "value": "[parameters('openAiApiBaseUrl')]" },
+                { "name": "ENABLE_OLLAMA_API", "value": "[string(parameters('enableOllamaApi'))]" },
+                { "name": "OLLAMA_BASE_URL", "value": "[parameters('ollamaBaseUrl')]" },
+                { "name": "CORS_ALLOW_ORIGIN", "value": "*" },
+                { "name": "FORWARDED_ALLOW_IPS", "value": "*" },
+                { "name": "SCARF_NO_ANALYTICS", "value": "true" },
+                { "name": "DO_NOT_TRACK", "value": "true" },
+                { "name": "ANONYMIZED_TELEMETRY", "value": "false" }
+              ],
+              "volumeMounts": [
+                { "volumeName": "openwebui-data", "mountPath": "[variables('dataMountPath')]" }
+              ]
+            }
+          ],
+          "volumes": [
+            {
+              "name": "openwebui-data",
+              "storageType": "AzureFile",
+              "storageName": "[variables('storageMountName')]"
+            }
+          ],
+          "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 1
+          }
         }
       }
     }
@@ -182,7 +235,7 @@
   "outputs": {
     "webAppUrl": {
       "type": "string",
-      "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', parameters('webAppName'))).defaultHostName)]"
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', parameters('appName'))).configuration.ingress.fqdn)]"
     }
   }
 }

@@ -2,11 +2,14 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "webAppName": {
+    "appName": {
       "value": "openwebui-sample"
     },
-    "appServicePlanSku": {
-      "value": "B2"
+    "containerCpu": {
+      "value": "1.0"
+    },
+    "containerMemory": {
+      "value": "2Gi"
     },
     "openAiApiBaseUrl": {
       "value": "https://api.openai.com/v1"
