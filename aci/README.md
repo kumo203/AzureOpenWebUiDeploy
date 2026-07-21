@@ -1,7 +1,7 @@
 # Open WebUI on Azure Container Instances（検証・使い捨て用）
 
-このディレクトリのテンプレートは **動作検証専用** です。リポジトリルートの `azuredeploy.json`（Azure Container
-Apps + Azure Files永続化）とは別物で、次の点が異なります。
+このディレクトリのテンプレートは **動作検証専用** です。[`ConApps/`](../ConApps/README.md) の `azuredeploy.json`
+（Azure Container Apps + Azure Files永続化）とは別物で、次の点が異なります。
 
 - **永続化なし**: `/app/backend/data`（SQLiteのDB、アップロードファイル、キャッシュなど）はコンテナのローカル
   (エフェメラル)ディスクに置かれます。コンテナの再作成・削除でデータは消えます。
